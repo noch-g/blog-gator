@@ -11,17 +11,21 @@ import (
 )
 
 func handlerFeedAggregator(s *state, c command) error {
-	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return err
+	if len(c.Args) != 1 {
+		return fmt.Errorf("usage: %s <time_between_reqs>, example: %s 10s", c.Name, c.Name)
 	}
+	timeBetweenReqs := c.Args[0]
 
-	for _, item := range feed.Channel.Item {
-		item.Title = html.UnescapeString(item.Title)
-		item.Description = html.UnescapeString(item.Description)
+	timeBetweenReqsDuration, err := time.ParseDuration(timeBetweenReqs)
+	if err != nil {
+		return fmt.Errorf("couldn't parse time_between_reqs: %w", err)
 	}
-	fmt.Println(feed.Channel.Item)
-	return nil
+	fmt.Printf("Collecting feeds every %s\n", timeBetweenReqsDuration)
+
+	ticker := time.NewTicker(timeBetweenReqsDuration)
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
 }
 
 func handlerAddFeed(s *state, c command, user database.User) error {
@@ -75,5 +79,27 @@ func handlerListFeeds(s *state, c command) error {
 		}
 		fmt.Printf("%s: %s - %s\n", feed.Name, feed.Url, user.Name)
 	}
+	return nil
+}
+
+func scrapeFeeds(s *state) error {
+	feed, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return fmt.Errorf("couldn't get feed: %w", err)
+	}
+
+	s.db.MarkFeedFetched(context.Background(), feed.ID)
+
+	fetchedFeed, err := fetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch feed: %w", err)
+	}
+
+	items := fetchedFeed.Channel.Item
+	for _, item := range items {
+		item.Title = html.UnescapeString(item.Title)
+		fmt.Println(item.Title)
+	}
+
 	return nil
 }
