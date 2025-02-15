@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"html"
 	"time"
@@ -24,7 +25,10 @@ func handlerFeedAggregator(s *state, c command) error {
 
 	ticker := time.NewTicker(timeBetweenReqsDuration)
 	for ; ; <-ticker.C {
-		scrapeFeeds(s)
+		err := scrapeFeeds(s)
+		if err != nil {
+			fmt.Printf("Error scraping feeds: %s\n", err)
+		}
 	}
 }
 
@@ -96,10 +100,38 @@ func scrapeFeeds(s *state) error {
 	}
 
 	items := fetchedFeed.Channel.Item
+	postCount := 0
 	for _, item := range items {
-		item.Title = html.UnescapeString(item.Title)
-		fmt.Println(item.Title)
+		publishedAt := sql.NullTime{}
+		if t, err := time.Parse(time.RFC1123Z, item.PubDate); err == nil {
+			publishedAt = sql.NullTime{
+				Time:  t,
+				Valid: true,
+			}
+		}
+		_, err := s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Title:     html.UnescapeString(item.Title),
+			Url:       item.Link,
+			Description: sql.NullString{
+				String: html.UnescapeString(item.Description),
+				Valid:  true,
+			},
+			PublishedAt: publishedAt,
+			FeedID:      feed.ID,
+		})
+		if err != nil {
+			if err.Error() == "pq: duplicate key value violates unique constraint \"posts_url_key\"" {
+				continue
+			}
+			fmt.Printf("couldn't create post: %v\n", err)
+			continue
+		}
+		postCount++
 	}
+	fmt.Printf("Found %d new posts from %s\n", postCount, feed.Url)
 
 	return nil
 }
