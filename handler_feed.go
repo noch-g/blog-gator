@@ -24,17 +24,12 @@ func handlerFeedAggregator(s *state, c command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, c command) error {
+func handlerAddFeed(s *state, c command, user database.User) error {
 	if len(c.Args) != 2 {
 		return fmt.Errorf("usage: %s <name> <url>", c.Name)
 	}
 	name := c.Args[0]
 	url := c.Args[1]
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("couldn't get user: %w", err)
-	}
 
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        uuid.New(),
