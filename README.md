@@ -16,6 +16,8 @@ It is a CLI tool that scrapes RSS feeds and saves the posts to a postgresql data
 
 ## Installation
 
+The source code is currently hosted on [GitHub](https://www.github.com/noch-g/blog-gator).
+
 ```bash
 > go install github.com/noch-g/blog-gator@latest
 ```
